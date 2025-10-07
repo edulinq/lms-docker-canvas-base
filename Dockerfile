@@ -1,4 +1,11 @@
-FROM ruby:3.4.6-alpine3.22
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV NODE_MAJOR=20
+
+ENV RUBY_VERSION=3.4.5
+ENV RUBY_SHORT_VERSION=3.4
 
 ENV CANVAS_VERSION=2025-09-24.167
 ENV CANVAS_TAG=release/$CANVAS_VERSION
@@ -13,43 +20,76 @@ WORKDIR /work
 
 # Install the base/build packages before the main dependency packages.
 RUN \
-    apk add --no-cache \
+    apt-get update \
+    && apt-get install -y \
         # Convenience \
-        bash \
         vim \
         # Base Tooling \
-        build-base \
+        build-essential \
+        ca-certificates \
         curl \
         git \
-        libidn-dev \
-        libpq-dev \
-        linux-headers \
-        openrc \
-        shared-mime-info \
+        gnupg \
+        openssl \
+        rustc \
+        software-properties-common \
         unzip \
         wget \
-        xmlsec-dev \
-        yaml-dev \
-        # Python \
-        python3 \
-        py3-pip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install keys and sources.
+RUN \
+    # Postgres \
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+    # Node \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    # Yarn \
+    && curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
+    && echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+
+# Install main dependencies.
+RUN \
+    apt-get update \
+    && apt-get install -y \
+        # Misc Deps \
+        autoconf \
+        libffi-dev \
+        libgmp-dev \
+        libidn11-dev \
+        libldap2-dev \
+        libpq-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        libxml2-dev \
+        libxmlsec1-dev \
+        libyaml-dev \
+        zlib1g-dev \
+        # Postgres \
+        postgresql-14 \
         # Node \
         nodejs \
-        npm \
-        yarn \
-        # Postgres \
-        postgresql17 \
-        postgresql17-contrib \
-        postgresql17-openrc
+        # Yarn \
+        yarn=1.19.1-1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Init openrc.
+# Install Ruby From Source
 RUN \
-    mkdir /run/openrc \
-    touch /run/openrc/softlevel
+    wget "https://cache.ruby-lang.org/pub/ruby/${RUBY_SHORT_VERSION}/ruby-${RUBY_VERSION}.tar.gz" \
+    && tar zxf "ruby-${RUBY_VERSION}.tar.gz" \
+    && cd "ruby-${RUBY_VERSION}" \
+    && ./configure \
+    && (make || cat config.log) \
+    && make install -j4 \
+    && rm -rf /work/ruby*
 
 # Setup Postgres
 RUN \
-    rc-service postgresql start \
+    service postgresql start \
     && su postgres -c "createuser root" \
     && su postgres -c "psql -c 'ALTER USER root WITH SUPERUSER' -d postgres" \
     && psql -c "CREATE USER canvas WITH PASSWORD 'canvas'" -d postgres \
@@ -65,7 +105,7 @@ RUN \
     && psql -c "GRANT ALL PRIVILEGES ON DATABASE canvas_production TO canvas" -d canvas_production \
     && psql -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO canvas" -d canvas_production \
     && psql -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO canvas" -d canvas_production \
-    && rc-service postgresql stop
+    && service postgresql stop
 
 # Fetch Canvas
 RUN \
@@ -100,11 +140,12 @@ ENV COMPILE_ASSETS_BRAND_CONFIGS=0
 ENV RAILS_LOAD_ALL_LOCALES=0
 ENV USE_OPTIMIZED_JS=true
 ENV JS_BUILD_NO_FALLBACK=1
+ENV CANVAS_LMS_STATS_COLLECTION=opt_out
 
 # Setup Canvas
 RUN \
     # Start the DB \
-    rc-service postgresql start \
+    service postgresql start \
     # Copy Base Config Files \
     && for config in amazon_s3 database delayed_jobs domain dynamic_settings file_store outgoing_mail security external_migration; do cp -v config/$config.yml.example config/$config.yml; done \
     # Edit Config \
@@ -119,9 +160,9 @@ RUN \
     && sed -i "s/name = ask.*$/name = '${SERVER_OWNER_NAME}'/" lib/tasks/db_load_data.rake \
     && sed -i "s/name_confirm = ask.*$/name_confirm = '${SERVER_OWNER_NAME}'/" lib/tasks/db_load_data.rake \
     # Setup Data \
-    && CANVAS_LMS_STATS_COLLECTION=opt_out bundle exec rails db:initial_setup \
+    && bundle exec rails db:initial_setup \
     # Stop the DB \
-    && rc-service postgresql stop \
+    && service postgresql stop \
     # Cleanup \
     && rm -rf /work/canvas-source/tmp /tmp/* \
     && yarn cache clean \
