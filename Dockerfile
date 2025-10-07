@@ -77,11 +77,29 @@ RUN \
 WORKDIR /work/canvas-source
 
 # Install Canvas Ruby Dependencies
+
+RUN gem install bundler:2.6.7
+
 RUN \
-   gem install bundler:2.6.7 \
-    && bundle install \
-    # Official documentation notes that we may have to run this twice. \
-    && (yarn install --pure-lockfile --network-timeout 100000 || yarn install --pure-lockfile --network-timeout 100000)
+    bundle install \
+    && bundle clean --force
+
+RUN \
+    ( \
+        # Official documentation notes that we may have to run this twice. \
+        yarn install --pure-lockfile --network-timeout 100000 --production \
+        || yarn install --pure-lockfile --network-timeout 100000 --production \
+    ) \
+    && yarn cache clean
+
+# Canvas env options.
+ENV COMPILE_ASSETS_API_DOCS=0
+ENV COMPILE_ASSETS_STYLEGUIDE=0
+# See: https://github.com/instructure/canvas-lms/issues/2023
+ENV COMPILE_ASSETS_BRAND_CONFIGS=0
+ENV RAILS_LOAD_ALL_LOCALES=0
+ENV USE_OPTIMIZED_JS=true
+ENV JS_BUILD_NO_FALLBACK=1
 
 # Setup Canvas
 RUN \
@@ -92,8 +110,7 @@ RUN \
     # Edit Config \
     && sed -i 's/your_password/canvas/g;/secondary:/d;/replica:/d;/canvas_readonly_user/d' config/database.yml \
     # Setup Canvas \
-    # See: https://github.com/instructure/canvas-lms/issues/2023 \
-    && COMPILE_ASSETS_BRAND_CONFIGS=0 bundle exec rails canvas:compile_assets --trace \
+    && bundle exec rails canvas:compile_assets --trace \
     # Edit the setup script to remove user interaction. \
     && sed -i "s/email = ask.*$/email = '${SERVER_OWNER_EMAIL}'/" lib/tasks/db_load_data.rake \
     && sed -i "s/email_confirm = ask.*$/email_confirm = '${SERVER_OWNER_EMAIL}'/" lib/tasks/db_load_data.rake \
@@ -104,7 +121,11 @@ RUN \
     # Setup Data \
     && CANVAS_LMS_STATS_COLLECTION=opt_out bundle exec rails db:initial_setup \
     # Stop the DB \
-    && rc-service postgresql stop
+    && rc-service postgresql stop \
+    # Cleanup \
+    && rm -rf /work/canvas-source/tmp /tmp/* \
+    && yarn cache clean \
+    && npm cache clean --force
 
 # Copy Scripts
 COPY ./scripts /work/scripts
