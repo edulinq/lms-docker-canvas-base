@@ -80,6 +80,16 @@ WORKDIR /work/canvas-source
 
 RUN gem install bundler:2.6.7
 
+# TEST
+RUN \
+    apk add --no-cache \
+        protobuf-dev
+
+# TEST
+RUN \
+    (gem uninstall -a -I google-protobuf || true) \
+    && gem install --platform ruby google-protobuf
+
 RUN \
     bundle install \
     && bundle clean --force
