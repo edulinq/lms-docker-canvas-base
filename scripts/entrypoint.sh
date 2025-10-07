@@ -16,7 +16,7 @@ function main() {
 
     if [[ $exit_status -ne 0 ]] ; then
         echo "Failed to start Postgres."
-        return ${exist_status}
+        return ${exit_status}
     fi
 
     # Run Server
@@ -28,7 +28,7 @@ function main() {
 
     service postgresql stop
 
-    return ${exist_status}
+    return ${exit_status}
 }
 
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
