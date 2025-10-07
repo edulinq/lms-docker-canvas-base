@@ -1,4 +1,4 @@
-# LMS Docker Image - Canvas - Base
+# LMS Docker Image - Canvas Base
 
 A [Docker](https://en.wikipedia.org/wiki/Docker_(software)) image running an instance of
 [Instructure's Canvas Learning Management System (LMS)](https://en.wikipedia.org/wiki/Instructure).
