@@ -35,6 +35,9 @@ RUN \
         software-properties-common \
         unzip \
         wget \
+        # Python \
+        python3 \
+        python3-pip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
