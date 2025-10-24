@@ -19,6 +19,9 @@ function main() {
         return ${exit_status}
     fi
 
+    # Start background job processor.
+    bundle exec script/delayed_job run &
+
     # Run Server
 
     bundle exec rails server --binding 0.0.0.0
