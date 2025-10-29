@@ -145,6 +145,9 @@ ENV USE_OPTIMIZED_JS=true
 ENV JS_BUILD_NO_FALLBACK=1
 ENV CANVAS_LMS_STATS_COLLECTION=opt_out
 
+# Change the versioning partition constant to allow for larger IDs (specifically for submissions).
+RUN sed -i 's/5_000_000/5_000_000_000/' config/initializers/simply_versioned.rb
+
 # Setup Canvas
 RUN \
     # Start the DB \
@@ -173,5 +176,18 @@ RUN \
 
 # Copy Scripts
 COPY ./scripts /work/scripts
+
+# Quality of life improvements for debuggers.
+
+# Add in a history of useful commands.
+COPY ./resources/_.bash_history /root/.bash_history
+
+RUN \
+    locale-gen en_US.UTF-8 \
+    # Get a vimrc. \
+    && wget -O ~/.vimrc https://raw.githubusercontent.com/eriq-augustine/skeletons/refs/heads/master/_.vimrc \
+    # Get bash config. \
+    && wget -O ~/.bashrc https://raw.githubusercontent.com/eriq-augustine/skeletons/refs/heads/master/_.bashrc \
+    && wget -O ~/.bash_aliases https://raw.githubusercontent.com/eriq-augustine/skeletons/refs/heads/master/_.bash_aliases
 
 ENTRYPOINT ["/work/scripts/entrypoint.sh"]
